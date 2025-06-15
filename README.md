@@ -1,144 +1,121 @@
 # Contract Guard
 
-Contract Guard is an AI-powered web application that helps users analyze legal contracts. It extracts clauses from uploaded documents (PDF, DOCX, TXT), classifies them, assesses risk levels, and provides plain English explanations using OpenAI's GPT.
+A full-stack web application for analyzing legal contracts using local LLMs. Contract Guard helps users understand their contracts by breaking them down into clauses, classifying them, and providing plain English explanations.
 
 ## Features
 
-- 📄 Upload and analyze contracts (PDF, DOCX, TXT)
-- 🔍 Extract and classify individual clauses
-- ⚠️ Risk assessment (Low, Medium, High)
-- 💡 Plain English explanations using GPT
-- 📊 Interactive dashboard with charts
-- 💬 Ask questions about your contract
-- 🌙 Dark mode support
-- 📱 Fully responsive design
-
-## Tech Stack
-
-### Frontend
-
-- React.js with Vite
-- Tailwind CSS for styling
-- Recharts for data visualization
-- React Query for data fetching
-- React Dropzone for file uploads
-
-### Backend
-
-- Python Flask
-- OpenAI GPT API
-- pdfminer.six for PDF processing
-- python-docx for DOCX processing
-- spaCy for NLP
+- Upload and analyze legal contracts (PDF, DOCX, TXT)
+- Extract and classify individual clauses
+- Risk level assessment
+- Plain English explanations
+- Interactive dashboard with visualizations
+- Dark mode support
+- Completely offline operation
+- No API keys required
 
 ## Prerequisites
 
 - Python 3.8+
 - Node.js 16+
-- OpenAI API key
+- npm or yarn
+- CUDA-capable GPU (recommended for better performance)
 
-## Setup
+## Installation
 
-1. Clone the repository:
+### Backend Setup
 
-```bash
-git clone https://github.com/Kartekeya-Sharma/contract-guard.git
-cd contract-guard
-```
-
-2. Set up the backend:
+1. Create a virtual environment:
 
 ```bash
-cd backend
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python -m spacy download en_core_web_sm
 ```
 
-3. Set up the frontend:
+2. Install Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Frontend Setup
+
+1. Navigate to the frontend directory:
 
 ```bash
 cd frontend
+```
+
+2. Install dependencies:
+
+```bash
 npm install
 ```
 
-4. Create environment files:
+## Running the Application
 
-Backend (.env):
+### Start the Backend
 
-```
-OPENAI_API_KEY=your_openai_api_key
-FLASK_ENV=development
-```
-
-Frontend (.env):
-
-```
-VITE_API_URL=http://localhost:5000
-```
-
-## Running Locally
-
-1. Start the backend:
+1. Activate the virtual environment (if not already activated):
 
 ```bash
-cd backend
-flask run
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-2. Start the frontend:
+2. Start the Flask server:
+
+```bash
+python backend/app.py
+```
+
+The backend will be available at `http://localhost:5000`
+
+### Start the Frontend
+
+1. In a new terminal, navigate to the frontend directory:
 
 ```bash
 cd frontend
-npm run dev
 ```
 
-The application will be available at http://localhost:5173
-
-## Deployment
-
-### Backend (Render)
-
-1. Create a new Web Service
-2. Connect your GitHub repository
-3. Set build command: `pip install -r requirements.txt && python -m spacy download en_core_web_sm`
-4. Set start command: `gunicorn app:app`
-5. Add environment variables:
-   - OPENAI_API_KEY
-   - FLASK_ENV=production
-
-### Frontend (Render)
-
-1. Create a new Static Site
-2. Connect your GitHub repository
-3. Set build command: `cd frontend && npm install && npm run build`
-4. Set publish directory: `frontend/dist`
-5. Add environment variables:
-   - VITE_API_URL (your backend URL)
-
-## Docker Support
-
-Build and run with Docker Compose:
+2. Start the development server:
 
 ```bash
-docker-compose up --build
+npm start
 ```
 
-## Contributing
+The frontend will be available at `http://localhost:3000`
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Usage
+
+1. Open your browser and navigate to `http://localhost:3000`
+2. Drag and drop a contract file (PDF, DOCX, or TXT) or click to select one
+3. Wait for the analysis to complete
+4. View the results in the interactive dashboard
+5. Review individual clauses with their classifications and explanations
+
+## Technical Details
+
+### Backend
+
+- Flask web framework
+- HuggingFace Transformers for local LLM inference
+- PDF and DOCX parsing
+- Clause extraction and classification
+
+### Frontend
+
+- React.js
+- Tailwind CSS for styling
+- Chart.js for visualizations
+- Framer Motion for animations
+- Dark mode support
+
+## Performance Tips
+
+- For faster inference, use a CUDA-capable GPU
+- The application uses FLAN-T5-XL by default, but you can modify the model in `backend/models/classify_llm.py`
+- For better performance on CPU, consider using quantized models
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- OpenAI for GPT API
-- The open-source community for amazing tools and libraries
-- All contributors who help improve this project
+MIT License

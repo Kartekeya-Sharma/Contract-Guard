@@ -1,172 +1,147 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from dotenv import load_dotenv
 import os
+import logging
 from werkzeug.utils import secure_filename
-import json
-from services.openai_service import analyze_clause, answer_query
-from utils.extract_pdf import extract_text_from_pdf
-from utils.extract_docx import extract_text_from_docx
-from utils.clause_splitter import split_into_clauses
-from prometheus_client import Counter, Histogram, generate_latest
-from prometheus_client.exposition import generate_latest
-from utils.error_handlers import (
-    register_error_handlers,
-    validate_file,
-    handle_openai_error,
-    APIError
-)
 import time
+import traceback
+from utils.document_parser import parse_document
+from utils.chunker import split_into_clauses
+from models.classify_llm import classify_clause
 
-# Load environment variables
-load_dotenv()
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)
 
-# Register error handlers
-register_error_handlers(app)
+# Configure CORS
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:3000"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
-# Configuration
+# Configure upload settings
 UPLOAD_FOLDER = 'uploads'
+MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
 ALLOWED_EXTENSIONS = {'pdf', 'docx', 'txt'}
-MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5MB max file size
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
-# Ensure upload directory exists
+# Create uploads directory if it doesn't exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Define metrics
-REQUEST_COUNT = Counter(
-    'http_requests_total',
-    'Total HTTP requests',
-    ['method', 'endpoint', 'status']
-)
-
-REQUEST_LATENCY = Histogram(
-    'http_request_duration_seconds',
-    'HTTP request latency',
-    ['method', 'endpoint']
-)
-
-FILE_PROCESSING_TIME = Histogram(
-    'file_processing_seconds',
-    'Time spent processing files',
-    ['file_type']
-)
-
-OPENAI_API_CALLS = Counter(
-    'openai_api_calls_total',
-    'Total OpenAI API calls',
-    ['endpoint', 'status']
-)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@app.route('/metrics')
-def metrics():
-    return generate_latest()
+def process_file(file_path):
+    """Process the uploaded file and return analysis results"""
+    try:
+        # Extract text from document
+        logger.info('Extracting text from document')
+        text = parse_document(file_path)
+        logger.info(f"Text extracted successfully from {file_path}")
+        
+        # Split into clauses
+        logger.info('Splitting text into clauses')
+        clauses = split_into_clauses(text)
+        logger.info(f"Text split into {len(clauses)} clauses")
+        
+        # Classify each clause
+        results = []
+        for i, clause in enumerate(clauses, 1):
+            try:
+                logger.info(f'Classifying clause {i}/{len(clauses)}')
+                classification = classify_clause(clause)
+                results.append({
+                    'text': clause,
+                    'type': classification['type'],
+                    'risk_level': classification['risk_level'],
+                    'explanation': classification['explanation'],
+                    'specific_concerns': classification['specific_concerns']
+                })
+                logger.info(f"Clause {i}/{len(clauses)} classified successfully")
+            except Exception as e:
+                logger.error(f"Error classifying clause {i}: {str(e)}")
+                results.append({
+                    'text': clause,
+                    'type': 'Error',
+                    'risk_level': 'Unknown',
+                    'explanation': f'Error in classification: {str(e)}',
+                    'specific_concerns': ['Error occurred during classification']
+                })
+        
+        return {
+            'status': 'success',
+            'message': 'File processed successfully',
+            'clauses': results
+        }
+    except Exception as e:
+        logger.error(f"Error processing file: {str(e)}")
+        logger.error(traceback.format_exc())
+        return {
+            'status': 'error',
+            'message': f'Error processing file: {str(e)}',
+            'clauses': []
+        }
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    return jsonify({"status": "healthy"}), 200
+@app.route('/api/upload', methods=['POST', 'OPTIONS'])
+def upload_file():
+    if request.method == 'OPTIONS':
+        return '', 200
 
-@app.route('/api/analyze', methods=['POST'])
-def analyze_contract():
     start_time = time.time()
+    logger.info("Upload request received")
     
     try:
         if 'file' not in request.files:
-            raise APIError("No file provided", status_code=400)
+            logger.error("No file part in request")
+            return jsonify({'error': 'No file part'}), 400
         
         file = request.files['file']
-        validate_file(file, ALLOWED_EXTENSIONS, MAX_CONTENT_LENGTH)
+        logger.info(f"Received file: {file.filename}")
+        
+        if file.filename == '':
+            logger.error("No selected file")
+            return jsonify({'error': 'No selected file'}), 400
+        
+        if not allowed_file(file.filename):
+            logger.error(f"Invalid file type: {file.filename}")
+            return jsonify({'error': 'Invalid file type'}), 400
         
         filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         
-        # Extract text based on file type
-        file_type = filename.rsplit('.', 1)[1].lower()
-        with FILE_PROCESSING_TIME.labels(file_type=file_type).time():
-            if file_type == 'pdf':
-                text = extract_text_from_pdf(filepath)
-            elif file_type == 'docx':
-                text = extract_text_from_docx(filepath)
-            else:  # txt
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    text = f.read()
+        logger.info(f"Saving file to: {file_path}")
+        file.save(file_path)
+        logger.info("File saved successfully")
         
-        # Split into clauses
-        clauses = split_into_clauses(text)
+        # Process the file
+        logger.info("Starting file processing")
+        result = process_file(file_path)
+        logger.info(f"File processing completed: {result}")
         
-        # Analyze each clause
-        analyzed_clauses = []
-        for clause in clauses:
-            try:
-                analysis = analyze_clause(clause)
-                OPENAI_API_CALLS.labels(endpoint='analyze', status='success').inc()
-                analyzed_clauses.append(analysis)
-            except Exception as e:
-                OPENAI_API_CALLS.labels(endpoint='analyze', status='error').inc()
-                handle_openai_error(e)
+        end_time = time.time()
+        logger.info(f"Total processing time: {end_time - start_time:.2f} seconds")
         
-        # Clean up
-        os.remove(filepath)
-        
-        return jsonify({
-            "status": "success",
-            "clauses": analyzed_clauses
-        }), 200
-        
-    except Exception as e:
-        if isinstance(e, APIError):
-            raise e
-        raise APIError(str(e), status_code=500)
+        return jsonify(result)
     
-    finally:
-        duration = time.time() - start_time
-        REQUEST_LATENCY.labels(method='POST', endpoint='/api/analyze').observe(duration)
-        REQUEST_COUNT.labels(
-            method='POST',
-            endpoint='/api/analyze',
-            status='200' if 'e' not in locals() else '500'
-        ).inc()
+    except Exception as e:
+        logger.error(f"Error in upload_file: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/query', methods=['POST'])
-def query_contract():
-    start_time = time.time()
-    
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            raise APIError("No query provided", status_code=400)
-        
-        query = data['query']
-        answer = answer_query(query)
-        OPENAI_API_CALLS.labels(endpoint='query', status='success').inc()
-        
-        return jsonify({
-            'status': 'success',
-            'answer': answer
-        })
-    
-    except Exception as e:
-        if isinstance(e, APIError):
-            raise e
-        raise APIError(str(e), status_code=500)
-    
-    finally:
-        duration = time.time() - start_time
-        REQUEST_LATENCY.labels(method='POST', endpoint='/api/query').observe(duration)
-        REQUEST_COUNT.labels(
-            method='POST',
-            endpoint='/api/query',
-            status='200' if 'e' not in locals() else '500'
-        ).inc()
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'healthy'}), 200
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000) 
+    logger.info('Starting Flask application')
+    app.run(debug=True, host='0.0.0.0', port=5000) 
