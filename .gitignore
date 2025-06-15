@@ -1,4 +1,19 @@
+# Python virtual environment
+backend/venv/
+__pycache__/
+*.pyc
+
+# Node modules
+frontend/node_modules/
+frontend/.cache/
+
 # Large files
-backend/venv/Lib/site-packages/torch/lib/torch_cpu.dll
-backend/venv/Lib/site-packages/torch/lib/dnnl.lib
-frontend/node_modules/.cache/ 
+*.dll
+*.lib
+*.pack
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo 
