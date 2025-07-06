@@ -27,7 +27,7 @@ const ContractUpload = ({ onAnalysisComplete, setIsAnalyzing }) => {
       try {
         setIsAnalyzing(true);
         const response = await axios.post(
-          "http://localhost:5000/api/upload",
+          "http://localhost:5001/api/upload",
           formData,
           {
             headers: {

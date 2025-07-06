@@ -49,7 +49,7 @@ const FileUpload = ({ onUploadComplete }) => {
 
       // Create axios instance with base configuration
       const api = axios.create({
-        baseURL: "http://localhost:5000",
+        baseURL: "http://localhost:5001",
         timeout: 120000, // 2 minute timeout
         headers: {
           "Content-Type": "multipart/form-data",
@@ -57,7 +57,7 @@ const FileUpload = ({ onUploadComplete }) => {
       });
 
       try {
-        console.log("Starting upload to:", "http://localhost:5000/api/upload");
+        console.log("Starting upload to:", "http://localhost:5001/api/upload");
         const response = await api.post("/api/upload", formData, {
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round(
